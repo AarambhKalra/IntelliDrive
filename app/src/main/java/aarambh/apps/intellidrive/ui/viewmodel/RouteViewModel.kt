@@ -43,14 +43,12 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * One-shot events for non-fatal Firestore save failures.
-     * Instructor dashboard collects this to show a non-blocking warning snackbar
+     * Route dashboard collects this to show a non-blocking warning snackbar
      * while still displaying the locally-generated route.
      */
     private val _saveWarning = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val saveWarning: SharedFlow<String> = _saveWarning.asSharedFlow()
 
-    /** Active Firestore snapshot listener job (student side). */
-    private var studentObserverJob: Job? = null
 
     // ── Training-day progression ──────────────────────────────────────────────
 
@@ -67,11 +65,11 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
      *   Day 16+   →  10–15 km (full urban / arterial roads)
      */
     fun getDistanceRangeForDay(day: Int): Pair<Double, Double> = when {
-        day in 1..5   -> 1.0 to 3.0
-        day in 6..10  -> 3.0 to 6.0
-        day in 11..15 -> 6.0 to 10.0
-        day > 15      -> 10.0 to 15.0
-        else          -> 1.0 to 3.0  // fallback for day < 1
+        day in 1..5   -> 3.0 to 5.0   // 3-5km -> max 5 laps -> fits 9-stop Google Maps limit
+        day in 6..10  -> 5.0 to 8.0   // 2-3 laps
+        day in 11..15 -> 8.0 to 12.0  // 1-2 laps
+        day > 15      -> 12.0 to 15.0 // 1 lap
+        else          -> 3.0 to 5.0
     }
 
     /**
@@ -90,24 +88,24 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
      *   Day 16+   → target 70  (complex urban zones)
      */
     private fun targetDifficultyForDay(maxKm: Double): Double = when {
-        maxKm <= 3.0  ->  5.0
-        maxKm <= 6.0  -> 20.0
-        maxKm <= 10.0 -> 40.0
-        else          -> 70.0
+        maxKm <= 5.0  ->  5.0   // find the absolute quietest zone
+        maxKm <= 8.0  -> 20.0
+        maxKm <= 12.0 -> 40.0
+        else          -> 70.0 // complex urban zones
     }
 
-    // ── Instructor ────────────────────────────────────────────────────────────
+    // ── Generator ────────────────────────────────────────────────────────────
 
     /**
      * Finds the best practice zone near [origin] for [trainingDay], generates
-     * a loop route within it, saves it to Firestore under [instructorId], and
+     * a loop route within it, saves it to Firestore under [studentId], and
      * transitions to [RouteUiState.RouteReady].
      *
      * If the Firestore save fails (offline, quota, etc.) the route is still shown
      * locally and a warning is emitted to [saveWarning].
      */
     fun generateAndSaveRoute(
-        instructorId: String,
+        studentId: String,
         origin: LatLng,
         isLoop: Boolean = true,
         trainingDay: Int = 1
@@ -127,13 +125,13 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
                 targetDifficulty = targetDifficulty
             )
                 .onSuccess { route ->
-                    // Persist to Firestore — warn the instructor if it fails but keep
+                    // Persist to Firestore — warn if it fails but keep
                     // the route visible locally
-                    repository.saveActiveRoute(route, instructorId)
+                    repository.saveActiveRoute(route, studentId)
                         .onFailure { e ->
                             val msg = e.message ?: "Unknown error"
                             _saveWarning.tryEmit(
-                                "Route shown locally but failed to sync to students: $msg"
+                                "Route shown locally but failed to sync: $msg"
                             )
                             android.util.Log.w("RouteViewModel", "Firestore save failed: $msg")
                         }
@@ -155,48 +153,9 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── Student ───────────────────────────────────────────────────────────────
-
-    /**
-     * Starts a real-time Firestore listener for the active route.
-     * The student's map refreshes automatically whenever the instructor generates
-     * a new practice zone. Idempotent — calling it while already active is a no-op.
-     */
-    fun startObservingStudentRoute() {
-        if (studentObserverJob?.isActive == true) return
-
-        _routeState.value = RouteUiState.Loading
-
-        studentObserverJob = viewModelScope.launch {
-            repository.observeActiveRoute().collect { result ->
-                result
-                    .onSuccess { route ->
-                        if (route != null && route.encodedPolyline.isNotEmpty()) {
-                            val outbound  = decodePolyline(route.encodedPolyline)
-                            val returnPts = if (route.encodedPolylineReturn.isNotEmpty()) {
-                                decodePolyline(route.encodedPolylineReturn)
-                            } else emptyList()
-                            _routeState.value = RouteUiState.RouteReady(
-                                route, outbound + returnPts
-                            )
-                        } else {
-                            _routeState.value = RouteUiState.Idle
-                        }
-                    }
-                    .onFailure { e ->
-                        _routeState.value = RouteUiState.Error(
-                            e.message ?: "Failed to load route"
-                        )
-                    }
-            }
-        }
-    }
-
     // ── Shared ────────────────────────────────────────────────────────────────
 
     fun resetRoute() {
-        studentObserverJob?.cancel()
-        studentObserverJob = null
         _routeState.value = RouteUiState.Idle
     }
 }

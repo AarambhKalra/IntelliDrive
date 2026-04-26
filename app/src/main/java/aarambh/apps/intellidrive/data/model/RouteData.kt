@@ -2,8 +2,8 @@ package aarambh.apps.intellidrive.data.model
 
 /**
  * App-level route model.
- * Saved to Firestore at **routes/active** by the instructor,
- * and fetched by the student dashboard.
+ * Saved to Firestore at **routes/active** by the student,
+ * and fetched locally.
  *
  * ⚠️ This describes a PRACTICE ZONE, not a route starting from the user's location.
  *   - [destLat]/[destLng] is the practice zone starting point (5–20 km from the user).
@@ -16,7 +16,7 @@ package aarambh.apps.intellidrive.data.model
  */
 data class RouteData(
     val routeId: String = "",
-    val instructorId: String = "",
+    val studentId: String = "",
 
     /** Latitude of the practice zone starting point (NOT the user's current location). */
     val destLat: Double = 0.0,

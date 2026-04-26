@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.sp
 import aarambh.apps.intellidrive.ui.viewmodel.AuthUiState
 import aarambh.apps.intellidrive.ui.viewmodel.AuthViewModel
 
-private val ROLES = listOf("student", "instructor", "parent")
+private val ROLES = listOf("student", "parent")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +40,7 @@ fun RegisterScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var selectedRole by remember { mutableStateOf(ROLES[0]) }
+    var childId by remember { mutableStateOf("") }
     var dropdownExpanded by remember { mutableStateOf(false) }
 
     Column(
@@ -137,6 +138,17 @@ fun RegisterScreen(
             }
         }
 
+        if (selectedRole == "parent") {
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = childId,
+                onValueChange = { childId = it },
+                label = { Text("Child's Student ID") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // ── Error message ─────────────────────────────────────────────────────
@@ -151,7 +163,7 @@ fun RegisterScreen(
 
         // ── Register button ───────────────────────────────────────────────────
         Button(
-            onClick = { viewModel.register(name, email, password, selectedRole) },
+            onClick = { viewModel.register(name, email, password, selectedRole, childId) },
             enabled = uiState !is AuthUiState.Loading,
             modifier = Modifier
                 .fillMaxWidth()

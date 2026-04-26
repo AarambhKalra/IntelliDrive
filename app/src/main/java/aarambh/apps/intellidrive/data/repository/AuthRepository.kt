@@ -33,11 +33,21 @@ class AuthRepository {
         name: String,
         email: String,
         password: String,
-        role: String
+        role: String,
+        childId: String = ""
     ): Result<User> = runCatching {
         val result = auth.createUserWithEmailAndPassword(email, password).await()
-        val uid = result.user?.uid ?: error("UID was null after registration")
-        val user = User(uid = uid, name = name, email = email, role = role)
+        val uid = result.user?.uid ?: throw Exception("Registration failed (no UID)")
+
+        val user = User(
+            uid = uid,
+            name = name,
+            email = email,
+            role = role,
+            trainingDay = 1,
+            childId = childId
+        )
+
         firestore.collection("users").document(uid).set(user).await()
         user
     }

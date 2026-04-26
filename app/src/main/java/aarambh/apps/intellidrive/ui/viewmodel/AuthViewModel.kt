@@ -58,9 +58,13 @@ class AuthViewModel(
 
     // ── Register ──────────────────────────────────────────────────────────────
 
-    fun register(name: String, email: String, password: String, role: String) {
+    fun register(name: String, email: String, password: String, role: String, childId: String) {
         if (name.isBlank() || email.isBlank() || password.isBlank() || role.isBlank()) {
             _uiState.update { AuthUiState.Error("All fields are required") }
+            return
+        }
+        if (role == "parent" && childId.isBlank()) {
+            _uiState.update { AuthUiState.Error("Child ID is required for parent accounts") }
             return
         }
         if (password.length < 6) {
@@ -71,7 +75,7 @@ class AuthViewModel(
         _uiState.update { AuthUiState.Loading }
 
         viewModelScope.launch {
-            repository.register(name.trim(), email.trim(), password, role)
+            repository.register(name.trim(), email.trim(), password, role, childId.trim())
                 .onSuccess { user -> _uiState.update { AuthUiState.Success(user) } }
                 .onFailure { ex ->
                     _uiState.update {
@@ -91,6 +95,15 @@ class AuthViewModel(
             runCatching { repository.fetchUser(uid) }
                 .onSuccess { user -> _uiState.update { AuthUiState.Success(user) } }
                 .onFailure { _uiState.update { AuthUiState.Idle } }
+        }
+    }
+
+    /** Refreshes the user's data from Firestore (e.g., after a training day graduation). */
+    fun refreshUser() {
+        val uid = repository.currentUserId ?: return
+        viewModelScope.launch {
+            runCatching { repository.fetchUser(uid) }
+                .onSuccess { user -> _uiState.update { AuthUiState.Success(user) } }
         }
     }
 

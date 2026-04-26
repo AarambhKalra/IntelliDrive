@@ -7,7 +7,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import aarambh.apps.intellidrive.ui.screens.auth.LoginScreen
 import aarambh.apps.intellidrive.ui.screens.auth.RegisterScreen
-import aarambh.apps.intellidrive.ui.screens.dashboard.InstructorDashboardScreen
 import aarambh.apps.intellidrive.ui.screens.dashboard.ParentDashboardScreen
 import aarambh.apps.intellidrive.ui.screens.dashboard.StudentDashboardScreen
 import aarambh.apps.intellidrive.ui.viewmodel.AuthViewModel
@@ -69,17 +68,6 @@ fun AppNavGraph(
             )
         }
 
-        composable(Screen.InstructorDashboard.route) {
-            InstructorDashboardScreen(
-                viewModel = authViewModel,
-                onSignOut = {
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                }
-            )
-        }
-
         composable(Screen.ParentDashboard.route) {
             ParentDashboardScreen(
                 viewModel = authViewModel,
@@ -95,7 +83,6 @@ fun AppNavGraph(
 
 /** Maps a Firestore role string to the correct dashboard [Screen]. */
 private fun roleToScreen(role: String): Screen = when (role) {
-    "instructor" -> Screen.InstructorDashboard
     "parent"     -> Screen.ParentDashboard
     else         -> Screen.StudentDashboard   // default / "student"
 }

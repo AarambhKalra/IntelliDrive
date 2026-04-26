@@ -30,11 +30,8 @@ import kotlin.random.Random
  * The [RouteData.destLat]/[RouteData.destLng] stored in Firestore is the practice
  * zone starting point — not a destination the user drives to from their home.
  *
- * Flow (instructor):
- *   generateBestRoute(location) → scans 8 zones → picks best-match → saves to Firestore
- *
  * Flow (student):
- *   observeActiveRoute()        → real-time Firestore snapshot listener as a Flow
+ *   generateBestRoute(location) -> scans 8 zones -> picks best-match -> saves to Firestore
  *
  * @param mapsApiKey  Google Maps API key from BuildConfig.MAPS_API_KEY
  */
@@ -280,35 +277,15 @@ class RouteRepository(private val mapsApiKey: String) {
     }
 
     /**
-     * Persists [route] (with [instructorId] stamped) to Firestore.
+     * Persists [route] (with [studentId] stamped) to Firestore.
      * Overwrites any previously active route.
      */
-    suspend fun saveActiveRoute(route: RouteData, instructorId: String): Result<Unit> =
+    suspend fun saveActiveRoute(route: RouteData, studentId: String): Result<Unit> =
         runCatching {
             db.document(ACTIVE_ROUTE_PATH)
-                .set(route.copy(instructorId = instructorId))
+                .set(route.copy(studentId = studentId))
                 .await()
         }
 
-    /**
-     * Returns a cold [Flow] that emits the active route whenever Firestore updates
-     * it (real-time snapshot listener). Emits [Result.success](null) if no route
-     * has been generated yet, or [Result.failure] on a listener error.
-     *
-     * The listener is automatically removed when the collecting coroutine is cancelled.
-     */
-    fun observeActiveRoute(): Flow<Result<RouteData?>> = callbackFlow {
-        val listener = db.document(ACTIVE_ROUTE_PATH)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    trySend(Result.failure(error))
-                    return@addSnapshotListener
-                }
-                val route = if (snapshot != null && snapshot.exists()) {
-                    snapshot.toObject(RouteData::class.java)
-                } else null
-                trySend(Result.success(route))
-            }
-        awaitClose { listener.remove() }
-    }
+
 }

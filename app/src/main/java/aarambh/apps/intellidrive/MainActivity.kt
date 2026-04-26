@@ -41,7 +41,6 @@ class MainActivity : ComponentActivity() {
                         uiState is AuthUiState.Success -> {
                             val role = (uiState as AuthUiState.Success).user.role
                             when (role) {
-                                "instructor" -> Screen.InstructorDashboard.route
                                 "parent"     -> Screen.ParentDashboard.route
                                 else         -> Screen.StudentDashboard.route
                             }

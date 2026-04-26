@@ -57,11 +57,11 @@ private const val DAILY_PRACTICE_KM = 15.0
 
 /**
  * Number of times the loop must be repeated to reach [DAILY_PRACTICE_KM].
- * Capped at 10 to stay within Google Maps' waypoint limit.
+ * Capped at 5 to stay within Google Maps' extremely strict waypoint limit (max 9-10).
  */
 private fun lapsNeeded(distanceKm: Double): Int =
     ceil(DAILY_PRACTICE_KM / distanceKm.coerceAtLeast(0.1))
-        .toInt().coerceIn(1, 10)
+        .toInt().coerceIn(1, 5)
 
 /**
  * Builds a Google Maps directions URL for N full laps of [route].
@@ -77,33 +77,19 @@ private fun buildPracticeLoopUri(route: RouteData): android.net.Uri {
     val zoneCenter = "${route.destLat},${route.destLng}"
     val turnaround = "${route.turnAroundLat},${route.turnAroundLng}"
 
-    // Decode polylines to find exact midpoints of the outbound and return legs
-    val outPoints = aarambh.apps.intellidrive.util.decodePolyline(route.encodedPolyline)
-    val retPoints = aarambh.apps.intellidrive.util.decodePolyline(route.encodedPolylineReturn)
-
-    val midOut = outPoints.getOrNull(outPoints.size / 2)?.let { "${it.latitude},${it.longitude}" }
-    val midRet = retPoints.getOrNull(retPoints.size / 2)?.let { "${it.latitude},${it.longitude}" }
-
     // Build the waypoint list
-    var wpList = mutableListOf<String>()
+    // To respect Google Maps Android intent limit (10 stops max), we skip
+    // intermediate polyline midpoints and only insert the strict turnaround point.
+    // 1 lap = 1 turnaround + (1 origin/dest link) -> 2 waypoints max per lap.
+    // 5 laps = 9 waypoints.
+    val wpList = mutableListOf<String>()
     for (i in 1..laps) {
-        if (midOut != null) wpList.add(midOut)
         wpList.add(turnaround)
-        if (midRet != null) wpList.add(midRet)
         
+        // Add zoneCenter as a waypoint to loop back, except on the final lap
+        // where the route naturally ends at destination=zoneCenter
         if (i < laps) {
             wpList.add(zoneCenter)
-        }
-    }
-
-    // Google Maps Android intents technically support ~24 waypoints + origin/dest.
-    // If a tiny loop requires too many laps, the URL gets too big.
-    // Fall back to just the turnarounds if we exceed 20 waypoints.
-    if (wpList.size > 20) {
-        wpList.clear()
-        for (i in 1..laps) {
-            wpList.add(turnaround)
-            if (i < laps) wpList.add(zoneCenter)
         }
     }
 
@@ -249,12 +235,13 @@ private fun RouteInfoCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 6.dp)
             )
+            val totalKm = lapsNeeded(route.distanceKm) * route.distanceKm
             RouteInfoRow(icon = "📅", label = "Training Day",    value = "Day ${route.trainingDay}")
             RouteInfoRow(icon = "📏", label = "Loop Distance",   value = "%.1f km".format(route.distanceKm))
-            RouteInfoRow(icon = "🔁", label = "Daily laps",      value = "${lapsNeeded(route.distanceKm)} laps ≈ ${DAILY_PRACTICE_KM.toInt()} km")
-            RouteInfoRow(icon = "⏱",  label = "Duration/lap",   value = "%.0f min".format(route.durationMinutes))
-            RouteInfoRow(icon = "🚦", label = "Traffic delay",   value = "%.0f min".format(route.trafficDelayMinutes))
-            RouteInfoRow(icon = "↩",  label = "Turns",          value = "${route.turns}")
+            RouteInfoRow(icon = "🎯", label = "Total Distance",  value = "%.1f km (Goal: 15 km)".format(totalKm))
+            RouteInfoRow(icon = "🔁", label = "Laps Needed",     value = "${lapsNeeded(route.distanceKm)} laps")
+            RouteInfoRow(icon = "⏱",  label = "Est. Total Time", value = "%.0f min".format(route.durationMinutes * lapsNeeded(route.distanceKm)))
+            RouteInfoRow(icon = "🚦", label = "Traffic delay",   value = "%.0f min/lap".format(route.trafficDelayMinutes))
             RouteInfoRow(icon = "⚡", label = "Difficulty",     value = "%.1f".format(route.difficulty))
         }
     }
@@ -325,139 +312,20 @@ fun StudentDashboardScreen(
     viewModel: AuthViewModel,
     mapViewModel: MapViewModel = viewModel(),
     routeViewModel: RouteViewModel = viewModel(),
+    sessionViewModel: aarambh.apps.intellidrive.ui.viewmodel.SessionViewModel = viewModel(),
     onSignOut: () -> Unit
 ) {
     val uiState   by viewModel.uiState.collectAsState()
     val routeState by routeViewModel.routeState.collectAsState()
     val userName  = (uiState as? AuthUiState.Success)?.user?.name ?: "Student"
+    val studentId = (uiState as? AuthUiState.Success)?.user?.uid ?: ""
 
-    // Sign-out navigation
-    LaunchedEffect(uiState) { if (uiState is AuthUiState.Idle) onSignOut() }
-
-    // Subscribe to real-time route updates so the map refreshes automatically
-    // whenever the instructor generates a new route while this screen is open.
-    LaunchedEffect(Unit) { routeViewModel.startObservingStudentRoute() }
-
-    val routePoints = (routeState as? RouteUiState.RouteReady)?.polylinePoints ?: emptyList()
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Student Dashboard") },
-                actions = { TextButton(onClick = { viewModel.signOut() }) { Text("Sign Out") } }
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-        ) {
-            WelcomeHeader(name = userName)
-
-            MapWithLocation(
-                mapViewModel = mapViewModel,
-                modifier = Modifier.weight(1f),
-                routePoints = routePoints,
-                overlay = {
-                    when (routeState) {
-                        is RouteUiState.RouteReady -> {
-                            val route = (routeState as RouteUiState.RouteReady).route
-                            val context = LocalContext.current
-                            RouteInfoCard(
-                                route = route,
-                                modifier = Modifier.align(Alignment.TopCenter)
-                            )
-                            // Two-button layout at the bottom ─────────────────
-                            Column(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = {
-                                        // Step 2: start the multi-lap practice loop
-                                        // Passes turnaround as a mandatory waypoint so
-                                        // Google Maps follows the evaluated road
-                                        val intent = android.content.Intent(
-                                            android.content.Intent.ACTION_VIEW,
-                                            buildPracticeLoopUri(route)
-                                        )
-                                        context.startActivity(intent)
-                                    },
-                                    modifier = Modifier.fillMaxWidth().height(50.dp)
-                                ) {
-                                    Text("▶  Start Practice Loop (${lapsNeeded(route.distanceKm)} laps)")
-                                }
-                                OutlinedButton(
-                                    onClick = {
-                                        // Step 1: navigate to the practice zone
-                                        val uri = "google.navigation:q=${route.destLat},${route.destLng}"
-                                        val intent = android.content.Intent(
-                                            android.content.Intent.ACTION_VIEW,
-                                            android.net.Uri.parse(uri)
-                                        )
-                                        intent.setPackage("com.google.android.apps.maps")
-                                        context.startActivity(intent)
-                                    },
-                                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                                ) {
-                                    Text("📍  Navigate to Practice Zone")
-                                }
-                            }
-                        }
-                        is RouteUiState.Loading -> {
-                            CircularProgressIndicator(
-                                modifier = Modifier.align(Alignment.Center)
-                            )
-                        }
-                        is RouteUiState.Idle -> {
-                            NoRouteCard(modifier = Modifier.align(Alignment.Center))
-                        }
-                        is RouteUiState.Error -> {
-                            Card(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .padding(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer
-                                )
-                            ) {
-                                Text(
-                                    text = (routeState as RouteUiState.Error).message,
-                                    modifier = Modifier.padding(12.dp),
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                    }
-                }
-            )
-        }
-    }
-}
-
-// ── Instructor Dashboard ──────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun InstructorDashboardScreen(
-    viewModel: AuthViewModel,
-    mapViewModel: MapViewModel = viewModel(),
-    routeViewModel: RouteViewModel = viewModel(),
-    onSignOut: () -> Unit
-) {
-    val uiState    by viewModel.uiState.collectAsState()
-    val routeState by routeViewModel.routeState.collectAsState()
-    val userName   = (uiState as? AuthUiState.Success)?.user?.name ?: "Instructor"
-    val instructorId = (uiState as? AuthUiState.Success)?.user?.uid ?: ""
-
+    val trainingDay = (uiState as? AuthUiState.Success)?.user?.trainingDay ?: 1
+    val isGenerating = routeState is RouteUiState.Loading
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // Sign-out navigation
     LaunchedEffect(uiState) { if (uiState is AuthUiState.Idle) onSignOut() }
 
     // Show route-generation errors in the snackbar
@@ -471,26 +339,36 @@ fun InstructorDashboardScreen(
         }
     }
 
-    // Show non-fatal Firestore save warnings (route shown locally but not synced)
+    // We no longer automatically observe the old route from Firestore on app launch,
+    // ensuring the student dashboard always starts fresh when opened.
+
+    // Listen for session completions to graduate the student visually
     LaunchedEffect(Unit) {
-        routeViewModel.saveWarning.collect { warning ->
-            snackbarHostState.showSnackbar(
-                message = warning,
-                duration = SnackbarDuration.Long
-            )
+        sessionViewModel.sessionCompletedEvent.collect { newDay ->
+            viewModel.refreshUser() // Refreshes the auth object, updating the Training Day UI
+            routeViewModel.resetRoute() // Reset map so they drop back to the main UI
+            snackbarHostState.showSnackbar("Session complete! Graduated to Day $newDay 🎉", duration = SnackbarDuration.Short)
         }
     }
 
-    val routePoints = (routeState as? RouteUiState.RouteReady)?.polylinePoints ?: emptyList()
-    val isGenerating = routeState is RouteUiState.Loading
+    LaunchedEffect(studentId) { 
+        if (studentId.isNotEmpty()) mapViewModel.startLiveTracking(studentId) 
+    }
+    DisposableEffect(studentId) {
+        onDispose { mapViewModel.stopLiveTracking() }
+    }
 
-    var trainingDay by remember { mutableStateOf(1) }
-    val context = LocalContext.current
+    val routePoints = (routeState as? RouteUiState.RouteReady)?.polylinePoints ?: emptyList()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Instructor Dashboard") },
+                title = { 
+                    Column {
+                        Text("Student Dashboard")
+                        Text("Day $trainingDay • ID: $studentId", fontSize = 12.sp, color = Color.Gray)
+                    }
+                },
                 actions = { TextButton(onClick = { viewModel.signOut() }) { Text("Sign Out") } }
             )
         },
@@ -508,15 +386,14 @@ fun InstructorDashboardScreen(
                 modifier = Modifier.weight(1f),
                 routePoints = routePoints,
                 overlay = {
-                    // Route info card (top)
                     if (routeState is RouteUiState.RouteReady) {
+                        val route = (routeState as RouteUiState.RouteReady).route
                         RouteInfoCard(
-                            route = (routeState as RouteUiState.RouteReady).route,
+                            route = route,
                             modifier = Modifier.align(Alignment.TopCenter)
                         )
                     }
 
-                    // Loading spinner (centre, during generation)
                     if (isGenerating) {
                         Card(
                             modifier = Modifier.align(Alignment.Center),
@@ -535,78 +412,55 @@ fun InstructorDashboardScreen(
                         }
                     }
 
-                    // Bottom Controls
+                    // Two-button layout at the bottom ─────────────────
                     Column(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Training Day selector card (shown before generation)
-                        if (routeState !is RouteUiState.RouteReady && !isGenerating) {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)),
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                    Text(
-                                        "Zones are searched 1–10 km from your location.",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(bottom = 6.dp)
-                                    )
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Training Day: $trainingDay", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            IconButton(onClick = { if (trainingDay > 1) trainingDay-- }) {
-                                                Text("-", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                                            }
-                                            Text("$trainingDay", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                            IconButton(onClick = { if (trainingDay < 30) trainingDay++ }) {
-                                                Text("+", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Two-button layout — Navigate to Zone + Start Loop
                         if (routeState is RouteUiState.RouteReady) {
                             val route = (routeState as RouteUiState.RouteReady).route
-                            Button(
-                                onClick = {
-                                    val intent = android.content.Intent(
-                                        android.content.Intent.ACTION_VIEW,
-                                        buildPracticeLoopUri(route)
-                                    )
-                                    context.startActivity(intent)
-                                },
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp).height(50.dp)
-                            ) {
-                                Text("▶  Start Practice Loop (${lapsNeeded(route.distanceKm)} laps)")
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    val uri = "google.navigation:q=${route.destLat},${route.destLng}"
-                                    val intent = android.content.Intent(
-                                        android.content.Intent.ACTION_VIEW,
-                                        android.net.Uri.parse(uri)
-                                    )
-                                    intent.setPackage("com.google.android.apps.maps")
-                                    context.startActivity(intent)
-                                },
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).height(48.dp)
-                            ) {
-                                Text("📍  Navigate to Practice Zone")
-                            }
+                            val context = LocalContext.current
+                                Button(
+                                    onClick = {
+                                        sessionViewModel.startSession(studentId, route.routeId, route.trainingDay)
+                                        val intent = android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            buildPracticeLoopUri(route)
+                                        )
+                                        context.startActivity(intent)
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                                ) {
+                                    Text("▶  Start Practice Loop (${lapsNeeded(route.distanceKm)} laps)")
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        sessionViewModel.completeSession(studentId)
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                                ) {
+                                    Text("✅  Complete Session")
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        // Step 1: navigate to the practice zone
+                                        val uri = "google.navigation:q=${route.destLat},${route.destLng}"
+                                        val intent = android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(uri)
+                                        )
+                                        intent.setPackage("com.google.android.apps.maps")
+                                        context.startActivity(intent)
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                                ) {
+                                    Text("📍  Navigate to Practice Zone")
+                                }
                         }
 
-                        // Generate Practice Zone button
                         Button(
                             onClick = {
                                 val location = mapViewModel.currentLocation.value
@@ -615,7 +469,7 @@ fun InstructorDashboardScreen(
                                         snackbarHostState.showSnackbar("Waiting for GPS location…")
                                     }
                                 } else {
-                                    routeViewModel.generateAndSaveRoute(instructorId, location, true, trainingDay)
+                                    routeViewModel.generateAndSaveRoute(studentId, location, true, trainingDay)
                                 }
                             },
                             enabled = !isGenerating,
@@ -640,12 +494,26 @@ fun InstructorDashboardScreen(
 @Composable
 fun ParentDashboardScreen(
     viewModel: AuthViewModel,
+    sessionViewModel: aarambh.apps.intellidrive.ui.viewmodel.SessionViewModel = viewModel(),
     onSignOut: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val userName = (uiState as? AuthUiState.Success)?.user?.name ?: "Parent"
+    val childId  = (uiState as? AuthUiState.Success)?.user?.childId ?: ""
+
+    val liveLocation by sessionViewModel.liveLocation.collectAsState()
 
     LaunchedEffect(uiState) { if (uiState is AuthUiState.Idle) onSignOut() }
+
+    LaunchedEffect(childId) {
+        if (childId.isNotEmpty()) {
+            sessionViewModel.startObservingStudent(childId)
+        }
+    }
+
+    DisposableEffect(childId) {
+        onDispose { sessionViewModel.stopObservingStudent() }
+    }
 
     Scaffold(
         topBar = {
@@ -662,45 +530,37 @@ fun ParentDashboardScreen(
         ) {
             WelcomeHeader(name = userName)
 
-            // Live tracking is not yet implemented — show a placeholder instead
-            // of an idle GoogleMap so we don't waste resources or request permissions.
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Card(
-                    modifier = Modifier.padding(32.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    elevation = CardDefaults.cardElevation(6.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+            val loc = liveLocation
+            if (loc != null) {
+                val cameraPositionState = rememberCameraPositionState {
+                    position = CameraPosition.fromLatLngZoom(LatLng(loc.latitude, loc.longitude), 15f)
+                }
+                LaunchedEffect(loc) {
+                    cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(loc.latitude, loc.longitude)))
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    GoogleMap(
+                        modifier = Modifier.fillMaxSize(),
+                        cameraPositionState = cameraPositionState
                     ) {
-                        Text("📍", fontSize = 48.sp)
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "Live Tracking",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                        Marker(
+                            state = MarkerState(LatLng(loc.latitude, loc.longitude)),
+                            title = "Student Location",
+                            snippet = "Speed: ${loc.speedKmh.toInt()} km/h"
                         )
-                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier.weight(1f), 
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(modifier = Modifier.padding(bottom = 16.dp))
                         Text(
-                            "Coming Soon",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "You'll be able to follow your student's\ndrive in real time here.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
+                            "Waiting for student to start driving...", 
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }

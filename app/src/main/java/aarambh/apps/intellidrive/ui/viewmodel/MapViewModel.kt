@@ -2,6 +2,7 @@ package aarambh.apps.intellidrive.ui.viewmodel
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationServices
@@ -10,6 +11,9 @@ import com.google.android.gms.maps.model.LatLng
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import androidx.lifecycle.viewModelScope
 
 /**
  * Holds the user's current location for Map screens.
@@ -34,6 +38,8 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isLoadingLocation = MutableStateFlow(false)
     val isLoadingLocation: StateFlow<Boolean> = _isLoadingLocation.asStateFlow()
+
+    private val sessionRepository = aarambh.apps.intellidrive.data.repository.SessionRepository()
 
     // ── Location fetch ────────────────────────────────────────────────────────
 
@@ -65,5 +71,76 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
             .addOnFailureListener {
                 _isLoadingLocation.value = false
             }
+    }
+
+    private var locationCallback: com.google.android.gms.location.LocationCallback? = null
+
+    @SuppressLint("MissingPermission")
+    fun startLiveTracking(studentId: String) {
+        if (locationCallback != null) return
+        Log.d("MapViewModel", "Starting live tracking for student: $studentId")
+
+        // Push initial known location immediately to unblock Parent Dashboard
+        // in case the device is stationary (e.g. testing on an emulator).
+        // Uses .first() to wait if fetchLocation() hasn't returned the GPS lock yet.
+        viewModelScope.launch {
+            Log.d("MapViewModel", "Waiting for first valid location...")
+            val currentLoc = _currentLocation.first { it != null }
+            if (currentLoc != null) {
+                Log.d("MapViewModel", "Found location: $currentLoc. Syncing to Firestore for parent.")
+                sessionRepository.updateLiveLocation(
+                    aarambh.apps.intellidrive.data.model.LiveLocation(
+                        studentId = studentId,
+                        latitude = currentLoc.latitude,
+                        longitude = currentLoc.longitude,
+                        timestamp = System.currentTimeMillis(),
+                        speedKmh = 0f,
+                        bearing = 0f
+                    )
+                ).onFailure { Log.e("MapViewModel", "Failed to sync initial location", it) }
+            }
+        }
+
+        val request = com.google.android.gms.location.LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000L)
+            .setMinUpdateIntervalMillis(2000L)
+            .setMinUpdateDistanceMeters(5f)
+            .build()
+
+        locationCallback = object : com.google.android.gms.location.LocationCallback() {
+            override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
+                result.lastLocation?.let { loc ->
+                    Log.d("MapViewModel", "New location update: ${loc.latitude}, ${loc.longitude}")
+                    _currentLocation.value = LatLng(loc.latitude, loc.longitude)
+                    val speedKmh = (loc.speed * 3.6f) // m/s to km/h
+                    
+                    // Sync to Firestore
+                    viewModelScope.launch {
+                        sessionRepository.updateLiveLocation(
+                            aarambh.apps.intellidrive.data.model.LiveLocation(
+                                studentId = studentId,
+                                latitude = loc.latitude,
+                                longitude = loc.longitude,
+                                timestamp = System.currentTimeMillis(),
+                                speedKmh = speedKmh,
+                                bearing = loc.bearing
+                            )
+                        ).onFailure { Log.e("MapViewModel", "Failed to sync live location", it) }
+                    }
+                }
+            }
+        }
+
+        fusedLocationClient.requestLocationUpdates(
+            request, 
+            locationCallback!!, 
+            android.os.Looper.getMainLooper()
+        )
+    }
+
+    fun stopLiveTracking() {
+        locationCallback?.let {
+            fusedLocationClient.removeLocationUpdates(it)
+            locationCallback = null
+        }
     }
 }

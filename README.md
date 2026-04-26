@@ -1,36 +1,38 @@
 # IntelliDrive 🚗
 
-IntelliDrive is an Android application designed to assist learner drivers through intelligent route generation, practice zone discovery, and real-time drive session tracking. With role-based access for both Students and Instructors, IntelliDrive creates a structured and progressive learning environment for driving practice.
+IntelliDrive is a modern Android application designed to assist learner drivers through intelligent route generation, practice zone discovery, and real-time drive session tracking. It provides a structured and progressive learning environment with specialized features for both Students and Parents.
 
 ## ✨ Key Features
 
-* **Role-Based Dashboards:** Distinct interfaces and features tailored for Students and Instructors.
-* **Intelligent Route Generation:** Dynamically generates routes via the Google Directions API, factoring in distance, duration, and traffic.
-* **Practice Zone Discovery:** Identifies suitable practice areas within a 1-10km radius of the user's location, allowing for progressive difficulty based on the training day.
-* **Real-time Location Tracking:** Uses Google Maps SDK to display the user's current location, track drive progress, and visualize route polylines.
-* **Progress Tracking & Synchronization:** Saves drive sessions, routes, and performance data to Firebase Firestore, enabling seamless access for both students and monitoring instructors.
-* **Secure Authentication:** User authentication and session management powered by Firebase Auth.
+*   **Role-Based Dashboards:** Distinct interfaces for Students (practice/learning) and Parents/Instructors (monitoring/oversight).
+*   **Intelligent Route Generation:** Leverages Google Directions API to create practice routes based on distance, duration, and traffic conditions.
+*   **Practice Zone Discovery:** Automatically identifies suitable training areas within 1-10km, tailored to the student's current training day and skill level.
+*   **Real-time Location Tracking:** Integrated Google Maps SDK for live position tracking, route visualization via polylines, and session progress monitoring.
+*   **Cloud Synchronization:** Persistent storage of drive sessions, route history, and user performance data using Firebase Firestore.
+*   **Secure Authentication:** Robust user management and session persistence powered by Firebase Authentication.
 
 ## 🛠️ Tech Stack & Architecture
 
-* **Language:** Kotlin
-* **UI Framework:** Jetpack Compose (Modern, declarative UI)
-* **Architecture:** MVVM (Model-View-ViewModel) pattern
-* **Backend / Database:** Firebase Authentication, Cloud Firestore
-* **Maps & Routing:** Google Maps SDK for Android, Google Directions API
-* **Networking:** Retrofit + OkHttp for API calls
-* **Asynchronous Programming:** Kotlin Coroutines & Flow
+*   **Language:** Kotlin
+*   **UI Framework:** Jetpack Compose (Modern, declarative UI components)
+*   **Architecture:** MVVM (Model-View-ViewModel) for clean separation of concerns.
+*   **Backend:** Firebase Authentication & Cloud Firestore.
+*   **Networking:** Retrofit & OkHttp for Google Maps/Directions API integration.
+*   **Concurrency:** Kotlin Coroutines & Flow (StateFlow/SharedFlow) for reactive UI updates.
+*   **Dependency Management:** Gradle (Kotlin DSL).
 
 ## 📂 Project Structure
 
 - `data/`
-  - `api/` : Retrofit interfaces and client configurations using Google Directions API.
-  - `model/` : Data classes representing Domain entities like User, DirectionsModels, etc.
-  - `repository/` : Repositories (e.g., `RouteRepository`) handling data operations between APIs, Firebase, and ViewModels.
+    - `api/`: Retrofit service definitions and API client configurations.
+    - `model/`: Data entities (User, DriveSession, LiveLocation, RouteData, DirectionsModels).
+    - `repository/`: Data source abstraction (AuthRepository, RouteRepository, SessionRepository).
 - `ui/`
-  - `screens/` : Jetpack Compose UI screens (Authentication, Map, Dashboards).
-  - `viewmodel/` : ViewModels (e.g., `MapViewModel`) bridging UI composables and Data repositories, maintaining app state.
-- `utils/` : Helper classes and extension functions.
+    - `screens/`: Jetpack Compose UI implementations (Auth, Dashboard).
+    - `viewmodel/`: Business logic and UI state management (AuthViewModel, SessionViewModel).
+    - `navigation/`: Navigation graph and route definitions.
+    - `theme/`: App-wide styling, colors, and typography.
+- `util/`: Utility classes and extension functions.
 
 ## 🚀 Getting Started
 
@@ -38,43 +40,36 @@ IntelliDrive is an Android application designed to assist learner drivers throug
 
 - Android Studio (Ladybug or newer recommended)
 - Java JDK 17+
-- A Google Cloud Platform (GCP) Account with an active project, billing enabled, and following APIs activated:
-  - Maps SDK for Android
-  - Directions API
-- A Firebase Project configured for Android
+- Google Cloud Platform project with Maps SDK and Directions API enabled.
+- Firebase project configured for Android.
 
 ### Installation & Setup
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repository_url>
-   cd IntelliDrive
-   ```
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository_url>
+    cd IntelliDrive
+    ```
 
-2. **Add API Keys:**
-   Create or open `local.properties` in your project root and add your Google Maps API Key:
-   ```properties
-   MAPS_API_KEY=your_google_maps_api_key_here
-   ```
+2.  **Add API Keys:**
+    Add your Google Maps API Key to `local.properties`:
+    ```properties
+    MAPS_API_KEY=your_google_maps_api_key_here
+    ```
 
-3. **Configure Firebase:**
-   - Go to your Firebase Console and add a new Android Application.
-   - Enter your application package name (`aarambh.apps.intellidrive`).
-   - Download the `google-services.json` file.
-   - Place this file in the `app/` directory of your project.
+3.  **Configure Firebase:**
+    Place your `google-services.json` file in the `app/` directory.
 
-4. **Build & Run:**
-   - Open the project in Android Studio.
-   - Run a Gradle sync to download all dependencies.
-   - Select an emulator or connected physical device and click Run.
+4.  **Build & Run:**
+    Sync Gradle and run the app on an emulator or physical device.
 
-## 📱 Role Workflows
+## 📱 Workflows
 
-**Student Mode:**
-- Students can view their assigned training day, generate or discover intelligent practice routes tailored to their progression, and track their position live on the map. Drive history and route performance are synced with Firebase.
+**Student:**
+Starts drive sessions, follows generated routes, and tracks progress across different training days.
 
-**Instructor Mode:**
-- Instructors have access to a broader dashboard where they can track student progress, monitor live or completed sessions, and review generated routes.
+**Parent/Instructor:**
+Monitors student sessions in real-time and reviews practice history.
 
 ## 📝 License
 This project is for educational and learning purposes.
