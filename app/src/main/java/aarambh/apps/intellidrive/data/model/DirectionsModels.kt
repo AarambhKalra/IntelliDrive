@@ -6,6 +6,8 @@ import com.google.gson.annotations.SerializedName
 
 data class DirectionsResponse(
     val status: String = "",
+    @SerializedName("error_message")
+    val errorMessage: String? = null,
     val routes: List<DirectionsRoute> = emptyList()
 )
 

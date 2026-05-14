@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.sp
 import aarambh.apps.intellidrive.ui.viewmodel.AuthUiState
 import aarambh.apps.intellidrive.ui.viewmodel.AuthViewModel
 
-private val ROLES = listOf("student", "parent")
+private val ROLES = listOf("student", "parent", "instructor")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,20 +38,22 @@ fun RegisterScreen(
 
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var age by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var selectedRole by remember { mutableStateOf(ROLES[0]) }
     var childId by remember { mutableStateOf("") }
+    var isConfirmed by remember { mutableStateOf(false) }
     var dropdownExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 24.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // ── Header ────────────────────────────────────────────────────────────
+        // ... (Header text stays same)
         Text(
             text = "Create Account",
             fontSize = 28.sp,
@@ -87,6 +89,19 @@ fun RegisterScreen(
         )
 
         Spacer(modifier = Modifier.height(12.dp))
+
+        // ── Age field (Student only) ──────────────────────────────────────────
+        if (selectedRole == "student") {
+            OutlinedTextField(
+                value = age,
+                onValueChange = { age = it },
+                label = { Text("Age") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         // ── Password field ────────────────────────────────────────────────────
         OutlinedTextField(
@@ -149,7 +164,28 @@ fun RegisterScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Confirmation Checkbox (Student only) ──────────────────────────────
+        if (selectedRole == "student") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = isConfirmed,
+                    onCheckedChange = { isConfirmed = it }
+                )
+                Text(
+                    text = "I confirm that all information provided is true.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        } else {
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         // ── Error message ─────────────────────────────────────────────────────
         if (uiState is AuthUiState.Error) {
@@ -163,7 +199,9 @@ fun RegisterScreen(
 
         // ── Register button ───────────────────────────────────────────────────
         Button(
-            onClick = { viewModel.register(name, email, password, selectedRole, childId) },
+            onClick = {
+                viewModel.register(name, email, password, age, selectedRole, childId, isConfirmed)
+            },
             enabled = uiState !is AuthUiState.Loading,
             modifier = Modifier
                 .fillMaxWidth()

@@ -152,7 +152,10 @@ class RouteRepository(private val mapsApiKey: String) {
                 departureTime = "now",
                 apiKey        = mapsApiKey
             )
-            if (response.status != "OK" || response.routes.isEmpty()) return null
+            if (response.status != "OK" || response.routes.isEmpty()) {
+                android.util.Log.e("RouteRepository", "Directions API Error: status=${response.status}, error_message=${response.errorMessage}")
+                return null
+            }
 
             val route = response.routes.first()
             val leg   = route.legs.firstOrNull() ?: return null
@@ -177,6 +180,7 @@ class RouteRepository(private val mapsApiKey: String) {
                 difficulty            = difficulty
             )
         } catch (e: Exception) {
+            android.util.Log.e("RouteRepository", "Network/API failure: ${e.message}", e)
             null    // skip this zone on network/API failure
         }
     }

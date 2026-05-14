@@ -58,11 +58,33 @@ class AuthViewModel(
 
     // ── Register ──────────────────────────────────────────────────────────────
 
-    fun register(name: String, email: String, password: String, role: String, childId: String) {
+    fun register(
+        name: String,
+        email: String,
+        password: String,
+        age: String,
+        role: String,
+        childId: String,
+        isConfirmed: Boolean
+    ) {
+        val ageInt = age.toIntOrNull() ?: 0
+
         if (name.isBlank() || email.isBlank() || password.isBlank() || role.isBlank()) {
             _uiState.update { AuthUiState.Error("All fields are required") }
             return
         }
+
+        if (role == "student") {
+            if (ageInt < 16) {
+                _uiState.update { AuthUiState.Error("You must be at least 16 years old to register as a student") }
+                return
+            }
+            if (!isConfirmed) {
+                _uiState.update { AuthUiState.Error("Please confirm that the information provided is true") }
+                return
+            }
+        }
+
         if (role == "parent" && childId.isBlank()) {
             _uiState.update { AuthUiState.Error("Child ID is required for parent accounts") }
             return
@@ -75,7 +97,14 @@ class AuthViewModel(
         _uiState.update { AuthUiState.Loading }
 
         viewModelScope.launch {
-            repository.register(name.trim(), email.trim(), password, role, childId.trim())
+            repository.register(
+                name.trim(),
+                email.trim().lowercase(),
+                password,
+                ageInt,
+                role,
+                childId.trim()
+            )
                 .onSuccess { user -> _uiState.update { AuthUiState.Success(user) } }
                 .onFailure { ex ->
                     _uiState.update {
@@ -114,5 +143,17 @@ class AuthViewModel(
     fun signOut() {
         repository.signOut()
         _uiState.update { AuthUiState.Idle }
+    }
+
+    /** Manually updates the student's training day. */
+    fun updateTrainingDay(newDay: Int) {
+        val uid = repository.currentUserId ?: return
+        viewModelScope.launch {
+            // We use the SessionRepository logic here via the AuthRepository if we wanted, 
+            // but for simplicity let's just use Firestore directly or add to repository.
+            // Actually, SessionRepository already has graduateTrainingDay, let's add a setter.
+            aarambh.apps.intellidrive.data.repository.SessionRepository().setTrainingDay(uid, newDay)
+                .onSuccess { refreshUser() }
+        }
     }
 }

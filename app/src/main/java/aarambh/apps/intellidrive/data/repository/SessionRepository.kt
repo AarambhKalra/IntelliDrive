@@ -72,4 +72,10 @@ class SessionRepository {
         }.await()
         newDay
     }
+
+    suspend fun setTrainingDay(studentId: String, day: Int): Result<Unit> = runCatching {
+        db.document("users/$studentId")
+            .update("trainingDay", day)
+            .await()
+    }
 }

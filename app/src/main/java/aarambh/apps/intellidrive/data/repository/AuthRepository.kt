@@ -33,6 +33,7 @@ class AuthRepository {
         name: String,
         email: String,
         password: String,
+        age: Int,
         role: String,
         childId: String = ""
     ): Result<User> = runCatching {
@@ -43,6 +44,7 @@ class AuthRepository {
             uid = uid,
             name = name,
             email = email,
+            age = age,
             role = role,
             trainingDay = 1,
             childId = childId
