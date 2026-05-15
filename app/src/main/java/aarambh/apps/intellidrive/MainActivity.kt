@@ -17,10 +17,27 @@ import aarambh.apps.intellidrive.ui.theme.IntelliDriveTheme
 import aarambh.apps.intellidrive.ui.viewmodel.AuthUiState
 import aarambh.apps.intellidrive.ui.viewmodel.AuthViewModel
 
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+
 class MainActivity : ComponentActivity() {
+
+    // Request permission launcher for notifications
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        // Handle permission granted/rejected
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // Request Notification permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+
         setContent {
             IntelliDriveTheme {
                 Surface(

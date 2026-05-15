@@ -50,10 +50,9 @@ class SessionRepository {
     suspend fun getDriveSessions(studentId: String): Result<List<DriveSession>> = runCatching {
         val snapshot = db.collection("sessions")
             .whereEqualTo("studentId", studentId)
-            .orderBy("startTime", Query.Direction.DESCENDING)
             .get()
             .await()
-        snapshot.toObjects(DriveSession::class.java)
+        snapshot.toObjects(DriveSession::class.java).sortedByDescending { it.startTime }
     }
 
     // ── Training Day Progression ──────────────────────────────────────────────

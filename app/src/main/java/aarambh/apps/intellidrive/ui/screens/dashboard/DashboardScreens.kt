@@ -312,7 +312,7 @@ fun InstructorDashboardScreen(
     LaunchedEffect(instructorId) { if (instructorId.isNotEmpty()) instructorViewModel.fetchMyStudents(instructorId) }
 
     if (selectedStudent != null) {
-        InstructorLiveTrackingScreen(
+        InstructorAnalyticsScreen(
             student = selectedStudent!!,
             onBack = { selectedStudent = null }
         )
@@ -356,63 +356,6 @@ fun InstructorDashboardScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun InstructorLiveTrackingScreen(
-    student: User,
-    onBack: () -> Unit,
-    sessionViewModel: SessionViewModel = viewModel()
-) {
-    val liveLocation by sessionViewModel.liveLocation.collectAsState()
-
-    LaunchedEffect(student.uid) {
-        sessionViewModel.startObservingStudent(student.uid)
-    }
-    DisposableEffect(student.uid) {
-        onDispose { sessionViewModel.stopObservingStudent() }
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Tracking: ${student.name}") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        // Use a simple text back button if Icons.Default.ArrowBack is missing or just for speed
-                        Text("←", fontSize = 24.sp)
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            val loc = liveLocation
-            if (loc != null) {
-                val cameraPositionState = rememberCameraPositionState { position = CameraPosition.fromLatLngZoom(LatLng(loc.latitude, loc.longitude), 15f) }
-                LaunchedEffect(loc) { cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(loc.latitude, loc.longitude))) }
-                Box(Modifier.weight(1f)) {
-                    GoogleMap(modifier = Modifier.fillMaxSize(), cameraPositionState = cameraPositionState) {
-                        Marker(state = MarkerState(LatLng(loc.latitude, loc.longitude)), title = student.name, snippet = "Speed: ${loc.speedKmh.toInt()} km/h")
-                    }
-                }
-            } else {
-                Box(Modifier.weight(1f), Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "No active practice session. Waiting for student to start driving...", 
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 32.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun StudentListItem(student: User, onClick: () -> Unit) {
@@ -457,17 +400,13 @@ private fun AddStudentDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit, err
 @Composable
 fun ParentDashboardScreen(
     viewModel: AuthViewModel,
-    sessionViewModel: SessionViewModel = viewModel(),
     onSignOut: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val userName = (uiState as? AuthUiState.Success)?.user?.name ?: "Parent"
     val childId = (uiState as? AuthUiState.Success)?.user?.childId ?: ""
-    val liveLocation by sessionViewModel.liveLocation.collectAsState()
 
     LaunchedEffect(uiState) { if (uiState is AuthUiState.Idle) onSignOut() }
-    LaunchedEffect(childId) { if (childId.isNotEmpty()) sessionViewModel.startObservingStudent(childId) }
-    DisposableEffect(childId) { onDispose { sessionViewModel.stopObservingStudent() } }
 
     Scaffold(
         topBar = {
@@ -476,27 +415,13 @@ fun ParentDashboardScreen(
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
             WelcomeHeader(name = userName)
-            val loc = liveLocation
-            if (loc != null) {
-                val cameraPositionState = rememberCameraPositionState { position = CameraPosition.fromLatLngZoom(LatLng(loc.latitude, loc.longitude), 15f) }
-                LaunchedEffect(loc) { cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(loc.latitude, loc.longitude))) }
+            if (childId.isNotEmpty()) {
                 Box(Modifier.weight(1f)) {
-                    GoogleMap(modifier = Modifier.fillMaxSize(), cameraPositionState = cameraPositionState) {
-                        Marker(state = MarkerState(LatLng(loc.latitude, loc.longitude)), title = "Student Location", snippet = "Speed: ${loc.speedKmh.toInt()} km/h")
-                    }
+                    aarambh.apps.intellidrive.ui.screens.tracking.ParentTrackingScreen(learnerId = childId)
                 }
             } else {
                 Box(Modifier.weight(1f), Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(modifier = Modifier.padding(bottom = 16.dp))
-                        Text(
-                            "No active session found. Tracking will begin once the student starts practice.", 
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 32.dp)
-                        )
-                    }
+                    Text("No student linked to this account.", color = Color.Gray)
                 }
             }
         }

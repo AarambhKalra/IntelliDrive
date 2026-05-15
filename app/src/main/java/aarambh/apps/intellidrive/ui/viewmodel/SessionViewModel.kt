@@ -43,6 +43,15 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             repository.saveDriveSession(session)
         }
+        
+        // Start the background tracking service
+        val context = getApplication<Application>()
+        val startIntent = android.content.Intent(context, aarambh.apps.intellidrive.services.SessionForegroundService::class.java).apply {
+            action = aarambh.apps.intellidrive.services.SessionForegroundService.ACTION_START
+            putExtra(aarambh.apps.intellidrive.services.SessionForegroundService.EXTRA_SESSION_ID, sessionId)
+            putExtra(aarambh.apps.intellidrive.services.SessionForegroundService.EXTRA_LEARNER_ID, studentId)
+        }
+        androidx.core.content.ContextCompat.startForegroundService(context, startIntent)
     }
 
     fun completeSession(studentId: String) {
@@ -59,6 +68,13 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         currentSessionId = null
+        
+        // Stop the background tracking service
+        val context = getApplication<Application>()
+        val stopIntent = android.content.Intent(context, aarambh.apps.intellidrive.services.SessionForegroundService::class.java).apply {
+            action = aarambh.apps.intellidrive.services.SessionForegroundService.ACTION_STOP
+        }
+        context.startService(stopIntent)
     }
 
     // ── Parent / Instructor Actions ──────────────────────────────────────────

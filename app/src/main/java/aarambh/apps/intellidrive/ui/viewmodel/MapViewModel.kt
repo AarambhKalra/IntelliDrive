@@ -94,7 +94,7 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                         latitude = currentLoc.latitude,
                         longitude = currentLoc.longitude,
                         timestamp = System.currentTimeMillis(),
-                        speedKmh = 0f,
+                        speed = 0f,
                         bearing = 0f
                     )
                 ).onFailure { Log.e("MapViewModel", "Failed to sync initial location", it) }
@@ -111,7 +111,6 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                 result.lastLocation?.let { loc ->
                     Log.d("MapViewModel", "New location update: ${loc.latitude}, ${loc.longitude}")
                     _currentLocation.value = LatLng(loc.latitude, loc.longitude)
-                    val speedKmh = (loc.speed * 3.6f) // m/s to km/h
                     
                     // Sync to Firestore
                     viewModelScope.launch {
@@ -121,7 +120,7 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
                                 latitude = loc.latitude,
                                 longitude = loc.longitude,
                                 timestamp = System.currentTimeMillis(),
-                                speedKmh = speedKmh,
+                                speed = loc.speed,
                                 bearing = loc.bearing
                             )
                         ).onFailure { Log.e("MapViewModel", "Failed to sync live location", it) }

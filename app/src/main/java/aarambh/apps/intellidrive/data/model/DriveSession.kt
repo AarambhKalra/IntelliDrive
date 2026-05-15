@@ -8,5 +8,10 @@ data class DriveSession(
     val startTime: Long = 0,
     val endTime: Long = 0,
     val totalDistanceKm: Double = 0.0,
-    val wasCompleted: Boolean = false
+    val wasCompleted: Boolean = false,
+    // New fields
+    val safetyScore: Int = 100,
+    val harshBrakingCount: Int = 0,
+    val overspeedingCount: Int = 0,
+    val status: String = "active" // active, completed, cancelled
 )
